@@ -12,17 +12,21 @@ import {
 import {
   availabilitySchema,
   calendarEventSchema,
+  connectionSchema,
   createDefaultState,
   loadLocalState,
   profileSchema,
   removeRequest,
   resetLocalState,
   saveLocalState,
+  outgoingRequestSchema,
   setRequestStatus,
   type Availability,
+  type CalendarConnection,
   type CalendarEventInput,
   type LocalProfile,
   type LocalState,
+  type OutgoingRequestInput,
 } from "@/lib/local-state";
 
 type LocalStateContextValue = {
@@ -36,6 +40,11 @@ type LocalStateContextValue = {
   ) => void;
   deleteRequest: (id: string) => void;
   updateAvailability: (availability: Availability) => boolean;
+  sendCalendarRequest: (
+    connection: CalendarConnection,
+    request: OutgoingRequestInput,
+  ) => boolean;
+  cancelOutgoingRequest: (id: string) => void;
   createEvent: (event: CalendarEventInput) => boolean;
   updateEvent: (id: string, event: CalendarEventInput) => boolean;
   deleteEvent: (id: string) => void;
@@ -111,6 +120,44 @@ export function LocalStateProvider({ children }: { children: React.ReactNode }) 
     [persist, state],
   );
 
+  const sendCalendarRequest = useCallback(
+    (connection: CalendarConnection, request: OutgoingRequestInput) => {
+      const parsedConnection = connectionSchema.safeParse(connection);
+      const parsedRequest = outgoingRequestSchema.safeParse({
+        ...request,
+        id: crypto.randomUUID(),
+        status: "pending",
+        createdAt: new Date().toISOString(),
+      });
+      if (!parsedConnection.success || !parsedRequest.success) return false;
+
+      persist({
+        ...state,
+        connections: [
+          ...state.connections.filter(
+            (item) => item.username !== parsedConnection.data.username,
+          ),
+          parsedConnection.data,
+        ],
+        outgoingRequests: [...state.outgoingRequests, parsedRequest.data],
+      });
+      return true;
+    },
+    [persist, state],
+  );
+
+  const cancelOutgoingRequest = useCallback(
+    (id: string) => {
+      persist({
+        ...state,
+        outgoingRequests: state.outgoingRequests.map((request) =>
+          request.id === id ? { ...request, status: "cancelled" } : request,
+        ),
+      });
+    },
+    [persist, state],
+  );
+
   const createEvent = useCallback(
     (event: CalendarEventInput) => {
       const parsed = calendarEventSchema.safeParse({
@@ -164,6 +211,8 @@ export function LocalStateProvider({ children }: { children: React.ReactNode }) 
       updateRequest,
       deleteRequest,
       updateAvailability,
+      sendCalendarRequest,
+      cancelOutgoingRequest,
       createEvent,
       updateEvent,
       deleteEvent,
@@ -171,12 +220,14 @@ export function LocalStateProvider({ children }: { children: React.ReactNode }) 
     }),
     [
       createEvent,
+      cancelOutgoingRequest,
       deleteEvent,
       deleteRequest,
       hydrated,
       recovered,
       reset,
       state,
+      sendCalendarRequest,
       updateEvent,
       updateAvailability,
       updateProfile,

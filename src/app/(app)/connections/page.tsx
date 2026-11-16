@@ -1,14 +1,12 @@
-import { PlugZap } from "lucide-react";
+import type { Metadata } from "next";
 
-import { FeaturePlaceholder } from "@/components/feature-placeholder";
+import { ConnectionsContent } from "@/components/connections-content";
+
+export const metadata: Metadata = {
+  title: "Connections",
+  description: "Prepare meeting requests from shared OpenCal links.",
+};
 
 export default function ConnectionsPage() {
-  return (
-    <FeaturePlaceholder
-      icon={PlugZap}
-      eyebrow="No connections"
-      title="Connect calendars when integrations arrive"
-      description="External calendar connections require remote services and credentials. They are deliberately excluded from this local-only build."
-    />
-  );
+  return <ConnectionsContent />;
 }

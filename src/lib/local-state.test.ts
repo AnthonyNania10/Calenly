@@ -7,6 +7,7 @@ import {
   createDefaultAvailability,
   createDefaultState,
   loadLocalState,
+  outgoingRequestInputSchema,
   profileSchema,
   removeRequest,
   resetLocalState,
@@ -98,6 +99,26 @@ describe("local state persistence", () => {
     expect(result.source).toBe("migrated");
     expect(result.state.events).toEqual(calendarState.events);
     expect(result.state.availability).toEqual(createDefaultAvailability());
+  });
+
+  it("migrates version 3 availability data and adds connection state", () => {
+    const storage = new MemoryStorage();
+    const current = createDefaultState(new Date("2026-11-16T12:00:00.000Z"));
+    const availabilityState = {
+      version: 3,
+      profile: current.profile,
+      requests: current.requests,
+      events: current.events,
+      availability: current.availability,
+    };
+    storage.setItem(LOCAL_STATE_KEY, JSON.stringify(availabilityState));
+
+    const result = loadLocalState(storage);
+
+    expect(result.source).toBe("migrated");
+    expect(result.state.availability).toEqual(availabilityState.availability);
+    expect(result.state.connections).toEqual([]);
+    expect(result.state.outgoingRequests).toEqual([]);
   });
 
   it("recovers when browser storage is unavailable", () => {
@@ -256,6 +277,35 @@ describe("request decisions", () => {
       removed.events.some(
         (event) => event.id === `request-event-${request.id}`,
       ),
+    ).toBe(false);
+  });
+});
+
+describe("outgoing request validation", () => {
+  it("accepts a complete local request", () => {
+    expect(
+      outgoingRequestInputSchema.parse({
+        username: "maya-chen",
+        title: "Project planning",
+        message: "Could we review the launch plan?",
+        startsAt: "2026-11-20T17:00:00.000Z",
+        duration: 30,
+      }),
+    ).toMatchObject({
+      username: "maya-chen",
+      duration: 30,
+    });
+  });
+
+  it("rejects invalid usernames, empty titles, and unsupported durations", () => {
+    expect(
+      outgoingRequestInputSchema.safeParse({
+        username: "../maya",
+        title: "",
+        message: "",
+        startsAt: "2026-11-20T17:00:00.000Z",
+        duration: 25,
+      }).success,
     ).toBe(false);
   });
 });

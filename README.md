@@ -23,16 +23,16 @@ or external services are required.
 ## Local-first data
 
 The profile, calendar events, weekly availability, booking preferences, and
-demo request decisions are stored in `localStorage` under the versioned
-`opencal.local-state` key.
+incoming and outgoing request state are stored in `localStorage` under the
+versioned `opencal.local-state` key.
 `src/lib/local-state.ts` is the only module that reads or writes the serialized
 shape. It provides:
 
 - a Zod schema for the complete state and profile
 - deterministic defaults
 - explicit schema versioning
-- migrations from the original profile schema through calendar and availability
-  schema versions
+- migrations from the original profile schema through calendar, availability,
+  and connection schema versions
 - safe recovery from invalid JSON, stale versions, and unavailable storage
 - validated writes and a complete reset operation
 
@@ -53,10 +53,13 @@ from depending on browser APIs or producing hydration mismatches.
   request management; accepted requests become local calendar events
 - `src/components/availability-content.tsx` — weekly hours, meeting duration,
   booking buffer, and minimum-notice preferences
+- `src/components/connections-content.tsx` — shared-link parsing, calendar
+  previews, outgoing request composition, recent calendars, and request history
 - `src/components/settings-content.tsx` — validated local profile editor,
   preview, public URL, and reset control
 - `src/components/local-state-provider.tsx` — hydration-safe React state bridge
 - `src/lib/local-state.ts` — versioned storage contract and validation
+- `src/lib/calendar-links.ts` — safe calendar-link parsing and normalization
 - `src/components/ui/` — shadcn/ui primitives
 
 Server Components are the default. Client Components are limited to UI that
@@ -73,7 +76,8 @@ npm run build
 
 Vitest covers persistence round trips, multi-version migration, recovery, reset
 behavior, profile validation, calendar event validation, and availability
-constraints. ESLint uses the Next.js recommended rules, and `tsc --noEmit`
+constraints. It also covers calendar-link parsing and outgoing request
+validation. ESLint uses the Next.js recommended rules, and `tsc --noEmit`
 enforces strict type safety.
 
 ## Current boundaries
@@ -81,4 +85,6 @@ enforces strict type safety.
 This is a single-device prototype. It does not include authentication, remote
 sync, multi-user collaboration, a database, external calendar synchronization,
 recurrence, generated time slots, integrations, notifications, or public booking
-pages. Clearing site data or switching browsers removes local changes.
+pages. Connection requests are composed and tracked locally but are not delivered
+to another person without a future shared backend. Clearing site data or
+switching browsers removes local changes.

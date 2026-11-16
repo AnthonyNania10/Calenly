@@ -1,8 +1,10 @@
 import { z } from "zod";
 import { addDays, addMinutes, set, startOfDay } from "date-fns";
 
+import { CALENDAR_USERNAME_PATTERN } from "@/lib/calendar-links";
+
 export const LOCAL_STATE_KEY = "opencal.local-state";
-export const LOCAL_STATE_VERSION = 3;
+export const LOCAL_STATE_VERSION = 4;
 
 export const profileSchema = z.object({
   fullName: z
@@ -126,12 +128,47 @@ export const availabilitySchema = z.object({
     ),
 });
 
+export const connectionSchema = z.object({
+  username: z.string().regex(CALENDAR_USERNAME_PATTERN),
+  displayName: z.string().trim().min(1).max(100),
+  calendarUrl: z.string().trim().min(1).max(500),
+  addedAt: z.string().datetime(),
+});
+
+export const outgoingRequestInputSchema = z.object({
+  username: z.string().regex(CALENDAR_USERNAME_PATTERN),
+  title: z
+    .string()
+    .trim()
+    .min(1, "Enter a reason for the meeting.")
+    .max(100, "Keep the title under 100 characters."),
+  message: z
+    .string()
+    .trim()
+    .max(500, "Keep the message under 500 characters."),
+  startsAt: z.string().datetime(),
+  duration: z.union([
+    z.literal(15),
+    z.literal(30),
+    z.literal(45),
+    z.literal(60),
+  ]),
+});
+
+export const outgoingRequestSchema = outgoingRequestInputSchema.extend({
+  id: z.string().min(1),
+  status: z.enum(["pending", "cancelled"]),
+  createdAt: z.string().datetime(),
+});
+
 export const localStateSchema = z.object({
   version: z.literal(LOCAL_STATE_VERSION),
   profile: profileSchema,
   requests: z.array(demoRequestSchema),
   events: z.array(calendarEventSchema),
   availability: availabilitySchema,
+  connections: z.array(connectionSchema),
+  outgoingRequests: z.array(outgoingRequestSchema),
 });
 
 export type LocalProfile = z.infer<typeof profileSchema>;
@@ -139,6 +176,9 @@ export type DemoRequest = z.infer<typeof demoRequestSchema>;
 export type CalendarEvent = z.infer<typeof calendarEventSchema>;
 export type CalendarEventInput = Omit<CalendarEvent, "id">;
 export type Availability = z.infer<typeof availabilitySchema>;
+export type CalendarConnection = z.infer<typeof connectionSchema>;
+export type OutgoingRequest = z.infer<typeof outgoingRequestSchema>;
+export type OutgoingRequestInput = z.infer<typeof outgoingRequestInputSchema>;
 export type LocalState = z.infer<typeof localStateSchema>;
 
 export const defaultProfile: LocalProfile = {
@@ -256,6 +296,8 @@ export const createDefaultState = (reference = new Date()): LocalState => ({
   ],
   events: createDefaultEvents(reference),
   availability: createDefaultAvailability(),
+  connections: [],
+  outgoingRequests: [],
 });
 
 export function setRequestStatus(
@@ -321,6 +363,14 @@ const calendarStateSchema = z.object({
   events: z.array(calendarEventSchema),
 });
 
+const availabilityStateSchema = z.object({
+  version: z.literal(3),
+  profile: profileSchema,
+  requests: z.array(demoRequestSchema),
+  events: z.array(calendarEventSchema),
+  availability: availabilitySchema,
+});
+
 export function loadLocalState(storage?: StorageLike | null): LoadResult {
   if (!storage) {
     return { state: createDefaultState(), source: "default" };
@@ -338,6 +388,19 @@ export function loadLocalState(storage?: StorageLike | null): LoadResult {
       return { state: parsed.data, source: "stored" };
     }
 
+    const availabilityState = availabilityStateSchema.safeParse(value);
+    if (availabilityState.success) {
+      return {
+        state: {
+          ...availabilityState.data,
+          version: LOCAL_STATE_VERSION,
+          connections: [],
+          outgoingRequests: [],
+        },
+        source: "migrated",
+      };
+    }
+
     const calendarState = calendarStateSchema.safeParse(value);
     if (calendarState.success) {
       return {
@@ -345,6 +408,8 @@ export function loadLocalState(storage?: StorageLike | null): LoadResult {
           ...calendarState.data,
           version: LOCAL_STATE_VERSION,
           availability: createDefaultAvailability(),
+          connections: [],
+          outgoingRequests: [],
         },
         source: "migrated",
       };
@@ -358,6 +423,8 @@ export function loadLocalState(storage?: StorageLike | null): LoadResult {
           version: LOCAL_STATE_VERSION,
           events: createDefaultEvents(),
           availability: createDefaultAvailability(),
+          connections: [],
+          outgoingRequests: [],
         },
         source: "migrated",
       };
