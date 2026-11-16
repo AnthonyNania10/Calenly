@@ -1,9 +1,9 @@
 # OpenCal
 
 OpenCal is an open scheduling application built with Next.js, TypeScript,
-Tailwind CSS, shadcn/ui, and Supabase. Phase 1 provides the polished application
-shell, shared design system, environment-safe Supabase clients, and quality
-tooling that later product work will build on.
+Tailwind CSS, shadcn/ui, date-fns, and browser-local persistence. This build is
+a polished product shell for exploring OpenCal without accounts, credentials,
+remote services, or a database.
 
 ## Run locally
 
@@ -11,55 +11,46 @@ Requirements:
 
 - Node.js 22 or newer
 - npm
-- Docker (optional, for the local Supabase stack)
-- Supabase CLI (optional, for local database services)
 
 ```bash
 npm install
-cp .env.example .env.local
 npm run dev
 ```
 
-Open [http://localhost:3741](http://localhost:3741). The app works without
-Supabase credentials and shows a clear foundation-mode notice.
+Open [http://localhost:3741](http://localhost:3741). No environment variables
+or external services are required.
 
-## Supabase setup
+## Local-first data
 
-For a local stack:
+The profile and demo request decisions are stored in `localStorage` under the
+versioned `opencal.local-state` key. `src/lib/local-state.ts` is the only module
+that reads or writes the serialized shape. It provides:
 
-```bash
-supabase start
-```
+- a Zod schema for the complete state and profile
+- deterministic defaults
+- explicit schema versioning
+- safe recovery from invalid JSON, stale versions, and unavailable storage
+- validated writes and a complete reset operation
 
-Copy the API URL and publishable key from the command output into `.env.local`:
-
-```dotenv
-NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-local-publishable-key
-```
-
-These are the only application environment variables in Phase 1. A service-role
-key is intentionally not used or exposed. Browser and server clients both read
-the public configuration through the same validated helper and return `null`
-when configuration is unavailable.
-
-`supabase/config.toml` contains the local service configuration.
-`supabase/migrations/` is the future schema authority; the first migration lands
-with the Phase 2 data model.
+The React provider starts with the same default snapshot on the server and
+client, then hydrates browser data after mount. This prevents server rendering
+from depending on browser APIs or producing hydration mismatches.
 
 ## Architecture
 
-- `src/app/` — App Router entry point, metadata, global states, and route groups
-- `src/app/(public)/` — future public scheduling surfaces
-- `src/app/(auth)/` — future registration and sign-in surfaces
-- `src/app/(app)/` — future authenticated application surfaces
-- `src/components/` — reusable shell, landing, and shadcn/ui components
-- `src/lib/supabase/` — validated configuration and typed client factories
-- `src/types/database.ts` — placeholder for generated Supabase database types
-- `supabase/` — local configuration and versioned migrations
+- `src/app/(app)/` — dashboard, settings, navigation destinations, and loading
+  state
+- `src/components/app-shell.tsx` — responsive desktop and mobile navigation
+- `src/components/dashboard-content.tsx` — schedule, requests, upcoming events,
+  and quick actions
+- `src/components/settings-content.tsx` — validated local profile editor,
+  preview, public URL, and reset control
+- `src/components/local-state-provider.tsx` — hydration-safe React state bridge
+- `src/lib/local-state.ts` — versioned storage contract and validation
+- `src/components/ui/` — shadcn/ui primitives
 
 Server Components are the default. Client Components are limited to UI that
-requires browser interaction, such as the global error recovery action.
+requires browser state or interaction.
 
 ## Verification
 
@@ -70,12 +61,13 @@ npm test
 npm run build
 ```
 
-Vitest covers foundational utility and configuration behavior. ESLint uses the
-Next.js recommended rules, and `tsc --noEmit` enforces strict type safety.
+Vitest covers persistence round trips, recovery, reset behavior, and profile
+validation. ESLint uses the Next.js recommended rules, and `tsc --noEmit`
+enforces strict type safety.
 
-## Phase boundary
+## Current boundaries
 
-Phase 1 does not implement registration, login, profiles, protected routes,
-calendar data, availability, or scheduling requests. Those remain in Phases
-2–5 so each feature can arrive with its own schema migration, row-level security
-policies, validation, and tests.
+This is a single-device prototype. It does not include authentication, remote
+sync, multi-user collaboration, a database, real calendar events, availability
+editing, integrations, notifications, or public booking pages. Clearing site
+data or switching browsers removes local changes.
