@@ -10,12 +10,16 @@ import {
 } from "react";
 
 import {
+  availabilitySchema,
   calendarEventSchema,
   createDefaultState,
   loadLocalState,
   profileSchema,
+  removeRequest,
   resetLocalState,
   saveLocalState,
+  setRequestStatus,
+  type Availability,
   type CalendarEventInput,
   type LocalProfile,
   type LocalState,
@@ -30,6 +34,8 @@ type LocalStateContextValue = {
     id: string,
     status: "pending" | "accepted" | "declined",
   ) => void;
+  deleteRequest: (id: string) => void;
+  updateAvailability: (availability: Availability) => boolean;
   createEvent: (event: CalendarEventInput) => boolean;
   updateEvent: (id: string, event: CalendarEventInput) => boolean;
   deleteEvent: (id: string) => void;
@@ -83,12 +89,24 @@ export function LocalStateProvider({ children }: { children: React.ReactNode }) 
 
   const updateRequest = useCallback(
     (id: string, status: "pending" | "accepted" | "declined") => {
-      persist({
-        ...state,
-        requests: state.requests.map((request) =>
-          request.id === id ? { ...request, status } : request,
-        ),
-      });
+      persist(setRequestStatus(state, id, status));
+    },
+    [persist, state],
+  );
+
+  const deleteRequest = useCallback(
+    (id: string) => {
+      persist(removeRequest(state, id));
+    },
+    [persist, state],
+  );
+
+  const updateAvailability = useCallback(
+    (availability: Availability) => {
+      const parsed = availabilitySchema.safeParse(availability);
+      if (!parsed.success) return false;
+      persist({ ...state, availability: parsed.data });
+      return true;
     },
     [persist, state],
   );
@@ -144,6 +162,8 @@ export function LocalStateProvider({ children }: { children: React.ReactNode }) 
       recovered,
       updateProfile,
       updateRequest,
+      deleteRequest,
+      updateAvailability,
       createEvent,
       updateEvent,
       deleteEvent,
@@ -152,11 +172,13 @@ export function LocalStateProvider({ children }: { children: React.ReactNode }) 
     [
       createEvent,
       deleteEvent,
+      deleteRequest,
       hydrated,
       recovered,
       reset,
       state,
       updateEvent,
+      updateAvailability,
       updateProfile,
       updateRequest,
     ],

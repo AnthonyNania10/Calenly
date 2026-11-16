@@ -2,12 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import {
   LOCAL_STATE_KEY,
+  availabilitySchema,
   calendarEventSchema,
+  createDefaultAvailability,
   createDefaultState,
   loadLocalState,
   profileSchema,
+  removeRequest,
   resetLocalState,
   saveLocalState,
+  setRequestStatus,
   type StorageLike,
 } from "@/lib/local-state";
 
@@ -75,6 +79,25 @@ describe("local state persistence", () => {
     expect(result.state.profile.fullName).toBe("Legacy User");
     expect(result.state.requests).toEqual(legacy.requests);
     expect(result.state.events.length).toBeGreaterThan(0);
+    expect(result.state.availability).toEqual(createDefaultAvailability());
+  });
+
+  it("migrates version 2 calendar data and adds availability", () => {
+    const storage = new MemoryStorage();
+    const current = createDefaultState(new Date("2026-11-16T12:00:00.000Z"));
+    const calendarState = {
+      version: 2,
+      profile: current.profile,
+      requests: current.requests,
+      events: current.events,
+    };
+    storage.setItem(LOCAL_STATE_KEY, JSON.stringify(calendarState));
+
+    const result = loadLocalState(storage);
+
+    expect(result.source).toBe("migrated");
+    expect(result.state.events).toEqual(calendarState.events);
+    expect(result.state.availability).toEqual(createDefaultAvailability());
   });
 
   it("recovers when browser storage is unavailable", () => {
@@ -163,5 +186,76 @@ describe("calendar event validation", () => {
         endsAt: expect.any(Array),
       });
     }
+  });
+});
+
+describe("availability validation", () => {
+  it("accepts the complete seven-day default schedule", () => {
+    const availability = createDefaultAvailability();
+    expect(availabilitySchema.parse(availability)).toEqual(availability);
+  });
+
+  it("rejects enabled hours that end before they start", () => {
+    const availability = createDefaultAvailability();
+    availability.schedule[1] = {
+      ...availability.schedule[1],
+      start: "17:00",
+      end: "09:00",
+    };
+
+    const parsed = availabilitySchema.safeParse(availability);
+
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues[0]?.message).toBe(
+        "End time must be after start time.",
+      );
+    }
+  });
+
+  it("rejects schedules with duplicate weekdays", () => {
+    const availability = createDefaultAvailability();
+    availability.schedule[1] = {
+      ...availability.schedule[1],
+      day: "sunday",
+    };
+
+    expect(availabilitySchema.safeParse(availability).success).toBe(false);
+  });
+});
+
+describe("request decisions", () => {
+  it("adds accepted requests to the calendar and removes them when declined", () => {
+    const state = createDefaultState(new Date("2026-11-16T12:00:00.000Z"));
+    const request = state.requests[0];
+
+    const accepted = setRequestStatus(state, request.id, "accepted");
+    const linked = accepted.events.find(
+      (event) => event.id === `request-event-${request.id}`,
+    );
+
+    expect(linked).toMatchObject({
+      title: request.title,
+      startsAt: request.startsAt,
+    });
+    expect(
+      setRequestStatus(accepted, request.id, "declined").events.some(
+        (event) => event.id === `request-event-${request.id}`,
+      ),
+    ).toBe(false);
+  });
+
+  it("removes both a request and its linked calendar event", () => {
+    const state = createDefaultState(new Date("2026-11-16T12:00:00.000Z"));
+    const request = state.requests[0];
+    const accepted = setRequestStatus(state, request.id, "accepted");
+    const removed = removeRequest(accepted, request.id);
+
+    expect(removed.requests.some((item) => item.id === request.id)).toBe(false);
+    expect(
+      removed.events.some(
+        (event) => event.id === `request-event-${request.id}`,
+      ),
+    ).toBe(false);
   });
 });

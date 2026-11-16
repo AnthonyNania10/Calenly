@@ -1,14 +1,12 @@
-import { Clock3 } from "lucide-react";
+import type { Metadata } from "next";
 
-import { FeaturePlaceholder } from "@/components/feature-placeholder";
+import { AvailabilityContent } from "@/components/availability-content";
+
+export const metadata: Metadata = {
+  title: "My Availability",
+  description: "Configure local weekly hours and booking preferences.",
+};
 
 export default function AvailabilityPage() {
-  return (
-    <FeaturePlaceholder
-      icon={Clock3}
-      eyebrow="No availability rules"
-      title="Shape your ideal week in a future slice"
-      description="Availability editing needs real calendar behavior, so this local shell provides the navigation and empty state without inventing that feature."
-    />
-  );
+  return <AvailabilityContent />;
 }

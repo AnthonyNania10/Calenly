@@ -2,7 +2,7 @@ import { z } from "zod";
 import { addDays, addMinutes, set, startOfDay } from "date-fns";
 
 export const LOCAL_STATE_KEY = "opencal.local-state";
-export const LOCAL_STATE_VERSION = 2;
+export const LOCAL_STATE_VERSION = 3;
 
 export const profileSchema = z.object({
   fullName: z
@@ -76,17 +76,69 @@ export const calendarEventSchema = z
     path: ["endsAt"],
   });
 
+export const weekdaySchema = z.enum([
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+]);
+
+const timeSchema = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use a valid 24-hour time.");
+
+export const availabilityDaySchema = z
+  .object({
+    day: weekdaySchema,
+    enabled: z.boolean(),
+    start: timeSchema,
+    end: timeSchema,
+  })
+  .refine((window) => !window.enabled || window.end > window.start, {
+    message: "End time must be after start time.",
+    path: ["end"],
+  });
+
+export const availabilitySchema = z.object({
+  meetingDuration: z.union([
+    z.literal(15),
+    z.literal(30),
+    z.literal(45),
+    z.literal(60),
+  ]),
+  bufferMinutes: z.union([
+    z.literal(0),
+    z.literal(5),
+    z.literal(10),
+    z.literal(15),
+    z.literal(30),
+  ]),
+  minimumNoticeHours: z.number().int().min(0).max(168),
+  schedule: z
+    .array(availabilityDaySchema)
+    .length(7)
+    .refine(
+      (schedule) => new Set(schedule.map((window) => window.day)).size === 7,
+      "Each weekday must appear exactly once.",
+    ),
+});
+
 export const localStateSchema = z.object({
   version: z.literal(LOCAL_STATE_VERSION),
   profile: profileSchema,
   requests: z.array(demoRequestSchema),
   events: z.array(calendarEventSchema),
+  availability: availabilitySchema,
 });
 
 export type LocalProfile = z.infer<typeof profileSchema>;
 export type DemoRequest = z.infer<typeof demoRequestSchema>;
 export type CalendarEvent = z.infer<typeof calendarEventSchema>;
 export type CalendarEventInput = Omit<CalendarEvent, "id">;
+export type Availability = z.infer<typeof availabilitySchema>;
 export type LocalState = z.infer<typeof localStateSchema>;
 
 export const defaultProfile: LocalProfile = {
@@ -168,6 +220,21 @@ export function createDefaultEvents(reference = new Date()): CalendarEvent[] {
   ];
 }
 
+export const createDefaultAvailability = (): Availability => ({
+  meetingDuration: 30,
+  bufferMinutes: 10,
+  minimumNoticeHours: 24,
+  schedule: [
+    { day: "sunday", enabled: false, start: "09:00", end: "17:00" },
+    { day: "monday", enabled: true, start: "09:00", end: "17:00" },
+    { day: "tuesday", enabled: true, start: "09:00", end: "17:00" },
+    { day: "wednesday", enabled: true, start: "09:00", end: "17:00" },
+    { day: "thursday", enabled: true, start: "09:00", end: "17:00" },
+    { day: "friday", enabled: true, start: "09:00", end: "15:00" },
+    { day: "saturday", enabled: false, start: "09:00", end: "17:00" },
+  ],
+});
+
 export const createDefaultState = (reference = new Date()): LocalState => ({
   version: LOCAL_STATE_VERSION,
   profile: { ...defaultProfile },
@@ -188,7 +255,51 @@ export const createDefaultState = (reference = new Date()): LocalState => ({
     },
   ],
   events: createDefaultEvents(reference),
+  availability: createDefaultAvailability(),
 });
+
+export function setRequestStatus(
+  state: LocalState,
+  id: string,
+  status: DemoRequest["status"],
+): LocalState {
+  const request = state.requests.find((item) => item.id === id);
+  const linkedEventId = `request-event-${id}`;
+  let events = state.events.filter((event) => event.id !== linkedEventId);
+
+  if (request && status === "accepted") {
+    const startsAt = new Date(request.startsAt);
+    events = [
+      ...events,
+      {
+        id: linkedEventId,
+        title: request.title,
+        description: `Booking request from ${request.guestName}.`,
+        startsAt: startsAt.toISOString(),
+        endsAt: addMinutes(startsAt, 30).toISOString(),
+        color: "blue",
+      },
+    ];
+  }
+
+  return {
+    ...state,
+    events,
+    requests: state.requests.map((item) =>
+      item.id === id ? { ...item, status } : item,
+    ),
+  };
+}
+
+export function removeRequest(state: LocalState, id: string): LocalState {
+  return {
+    ...state,
+    events: state.events.filter(
+      (event) => event.id !== `request-event-${id}`,
+    ),
+    requests: state.requests.filter((request) => request.id !== id),
+  };
+}
 
 export type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
@@ -201,6 +312,13 @@ const legacyStateSchema = z.object({
   version: z.literal(1),
   profile: profileSchema,
   requests: z.array(demoRequestSchema),
+});
+
+const calendarStateSchema = z.object({
+  version: z.literal(2),
+  profile: profileSchema,
+  requests: z.array(demoRequestSchema),
+  events: z.array(calendarEventSchema),
 });
 
 export function loadLocalState(storage?: StorageLike | null): LoadResult {
@@ -220,6 +338,18 @@ export function loadLocalState(storage?: StorageLike | null): LoadResult {
       return { state: parsed.data, source: "stored" };
     }
 
+    const calendarState = calendarStateSchema.safeParse(value);
+    if (calendarState.success) {
+      return {
+        state: {
+          ...calendarState.data,
+          version: LOCAL_STATE_VERSION,
+          availability: createDefaultAvailability(),
+        },
+        source: "migrated",
+      };
+    }
+
     const legacy = legacyStateSchema.safeParse(value);
     if (legacy.success) {
       return {
@@ -227,6 +357,7 @@ export function loadLocalState(storage?: StorageLike | null): LoadResult {
           ...legacy.data,
           version: LOCAL_STATE_VERSION,
           events: createDefaultEvents(),
+          availability: createDefaultAvailability(),
         },
         source: "migrated",
       };

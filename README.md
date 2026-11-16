@@ -22,15 +22,17 @@ or external services are required.
 
 ## Local-first data
 
-The profile, calendar events, and demo request decisions are stored in
-`localStorage` under the versioned `opencal.local-state` key.
+The profile, calendar events, weekly availability, booking preferences, and
+demo request decisions are stored in `localStorage` under the versioned
+`opencal.local-state` key.
 `src/lib/local-state.ts` is the only module that reads or writes the serialized
 shape. It provides:
 
 - a Zod schema for the complete state and profile
 - deterministic defaults
 - explicit schema versioning
-- migration from the original profile-only schema to the calendar schema
+- migrations from the original profile schema through calendar and availability
+  schema versions
 - safe recovery from invalid JSON, stale versions, and unavailable storage
 - validated writes and a complete reset operation
 
@@ -47,6 +49,10 @@ from depending on browser APIs or producing hydration mismatches.
   and quick actions
 - `src/components/calendar-content.tsx` — responsive month calendar and local
   event creation, editing, and deletion
+- `src/components/requests-content.tsx` — pending, accepted, and declined
+  request management; accepted requests become local calendar events
+- `src/components/availability-content.tsx` — weekly hours, meeting duration,
+  booking buffer, and minimum-notice preferences
 - `src/components/settings-content.tsx` — validated local profile editor,
   preview, public URL, and reset control
 - `src/components/local-state-provider.tsx` — hydration-safe React state bridge
@@ -65,13 +71,14 @@ npm test
 npm run build
 ```
 
-Vitest covers persistence round trips, migration, recovery, reset behavior,
-profile validation, and calendar event validation. ESLint uses the Next.js
-recommended rules, and `tsc --noEmit` enforces strict type safety.
+Vitest covers persistence round trips, multi-version migration, recovery, reset
+behavior, profile validation, calendar event validation, and availability
+constraints. ESLint uses the Next.js recommended rules, and `tsc --noEmit`
+enforces strict type safety.
 
 ## Current boundaries
 
 This is a single-device prototype. It does not include authentication, remote
 sync, multi-user collaboration, a database, external calendar synchronization,
-recurrence, availability editing, integrations, notifications, or public
-booking pages. Clearing site data or switching browsers removes local changes.
+recurrence, generated time slots, integrations, notifications, or public booking
+pages. Clearing site data or switching browsers removes local changes.
