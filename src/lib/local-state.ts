@@ -1,7 +1,8 @@
 import { z } from "zod";
+import { addDays, addMinutes, set, startOfDay } from "date-fns";
 
 export const LOCAL_STATE_KEY = "opencal.local-state";
-export const LOCAL_STATE_VERSION = 1;
+export const LOCAL_STATE_VERSION = 2;
 
 export const profileSchema = z.object({
   fullName: z
@@ -46,14 +47,46 @@ export const demoRequestSchema = z.object({
   status: requestStatusSchema,
 });
 
+export const eventColorSchema = z.enum([
+  "blue",
+  "violet",
+  "emerald",
+  "amber",
+  "rose",
+]);
+
+export const calendarEventSchema = z
+  .object({
+    id: z.string().min(1),
+    title: z
+      .string()
+      .trim()
+      .min(1, "Enter an event title.")
+      .max(100, "Keep the title under 100 characters."),
+    description: z
+      .string()
+      .trim()
+      .max(500, "Keep the description under 500 characters."),
+    startsAt: z.string().datetime(),
+    endsAt: z.string().datetime(),
+    color: eventColorSchema,
+  })
+  .refine((event) => new Date(event.endsAt) > new Date(event.startsAt), {
+    message: "End time must be after start time.",
+    path: ["endsAt"],
+  });
+
 export const localStateSchema = z.object({
   version: z.literal(LOCAL_STATE_VERSION),
   profile: profileSchema,
   requests: z.array(demoRequestSchema),
+  events: z.array(calendarEventSchema),
 });
 
 export type LocalProfile = z.infer<typeof profileSchema>;
 export type DemoRequest = z.infer<typeof demoRequestSchema>;
+export type CalendarEvent = z.infer<typeof calendarEventSchema>;
+export type CalendarEventInput = Omit<CalendarEvent, "id">;
 export type LocalState = z.infer<typeof localStateSchema>;
 
 export const defaultProfile: LocalProfile = {
@@ -65,7 +98,77 @@ export const defaultProfile: LocalProfile = {
   timezone: "America/New_York",
 };
 
-export const createDefaultState = (): LocalState => ({
+export function createDefaultEvents(reference = new Date()): CalendarEvent[] {
+  const today = startOfDay(reference);
+  const at = (dayOffset: number, hour: number, minute = 0) =>
+    set(addDays(today, dayOffset), {
+      hours: hour,
+      minutes: minute,
+      seconds: 0,
+      milliseconds: 0,
+    });
+
+  const createEvent = (
+    id: string,
+    title: string,
+    description: string,
+    startsAt: Date,
+    duration: number,
+    color: CalendarEvent["color"],
+  ): CalendarEvent => ({
+    id,
+    title,
+    description,
+    startsAt: startsAt.toISOString(),
+    endsAt: addMinutes(startsAt, duration).toISOString(),
+    color,
+  });
+
+  return [
+    createEvent(
+      "event-weekly-planning",
+      "Weekly planning",
+      "Protect the week’s focus blocks and priorities.",
+      at(0, 9, 30),
+      45,
+      "violet",
+    ),
+    createEvent(
+      "event-product-critique",
+      "Product critique",
+      "Studio team review.",
+      at(0, 11),
+      60,
+      "blue",
+    ),
+    createEvent(
+      "event-client-kickoff",
+      "Client kickoff",
+      "Northstar Labs project kickoff.",
+      at(0, 14, 30),
+      45,
+      "emerald",
+    ),
+    createEvent(
+      "event-research-synthesis",
+      "Research synthesis",
+      "Turn interview notes into themes.",
+      at(1, 10),
+      60,
+      "amber",
+    ),
+    createEvent(
+      "event-mentoring",
+      "Mentoring session",
+      "Monthly design mentoring conversation.",
+      at(3, 13, 30),
+      30,
+      "rose",
+    ),
+  ];
+}
+
+export const createDefaultState = (reference = new Date()): LocalState => ({
   version: LOCAL_STATE_VERSION,
   profile: { ...defaultProfile },
   requests: [
@@ -84,14 +187,21 @@ export const createDefaultState = (): LocalState => ({
       status: "pending",
     },
   ],
+  events: createDefaultEvents(reference),
 });
 
 export type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 export type LoadResult = {
   state: LocalState;
-  source: "stored" | "default" | "recovered";
+  source: "stored" | "default" | "migrated" | "recovered";
 };
+
+const legacyStateSchema = z.object({
+  version: z.literal(1),
+  profile: profileSchema,
+  requests: z.array(demoRequestSchema),
+});
 
 export function loadLocalState(storage?: StorageLike | null): LoadResult {
   if (!storage) {
@@ -104,12 +214,25 @@ export function loadLocalState(storage?: StorageLike | null): LoadResult {
       return { state: createDefaultState(), source: "default" };
     }
 
-    const parsed = localStateSchema.safeParse(JSON.parse(raw));
-    if (!parsed.success) {
-      return { state: createDefaultState(), source: "recovered" };
+    const value: unknown = JSON.parse(raw);
+    const parsed = localStateSchema.safeParse(value);
+    if (parsed.success) {
+      return { state: parsed.data, source: "stored" };
     }
 
-    return { state: parsed.data, source: "stored" };
+    const legacy = legacyStateSchema.safeParse(value);
+    if (legacy.success) {
+      return {
+        state: {
+          ...legacy.data,
+          version: LOCAL_STATE_VERSION,
+          events: createDefaultEvents(),
+        },
+        source: "migrated",
+      };
+    }
+
+    return { state: createDefaultState(), source: "recovered" };
   } catch {
     return { state: createDefaultState(), source: "recovered" };
   }

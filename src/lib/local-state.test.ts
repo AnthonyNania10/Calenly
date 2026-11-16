@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   LOCAL_STATE_KEY,
+  calendarEventSchema,
   createDefaultState,
   loadLocalState,
   profileSchema,
@@ -58,6 +59,24 @@ describe("local state persistence", () => {
     expect(loadLocalState(storage).source).toBe("recovered");
   });
 
+  it("migrates version 1 data without losing the profile or requests", () => {
+    const storage = new MemoryStorage();
+    const current = createDefaultState(new Date("2026-11-16T12:00:00.000Z"));
+    const legacy = {
+      version: 1,
+      profile: { ...current.profile, fullName: "Legacy User" },
+      requests: current.requests,
+    };
+    storage.setItem(LOCAL_STATE_KEY, JSON.stringify(legacy));
+
+    const result = loadLocalState(storage);
+
+    expect(result.source).toBe("migrated");
+    expect(result.state.profile.fullName).toBe("Legacy User");
+    expect(result.state.requests).toEqual(legacy.requests);
+    expect(result.state.events.length).toBeGreaterThan(0);
+  });
+
   it("recovers when browser storage is unavailable", () => {
     const unavailable: StorageLike = {
       getItem() {
@@ -111,6 +130,37 @@ describe("profile validation", () => {
         username: expect.any(Array),
         email: expect.any(Array),
         avatarUrl: expect.any(Array),
+      });
+    }
+  });
+});
+
+describe("calendar event validation", () => {
+  const validEvent = {
+    id: "event-1",
+    title: "Planning session",
+    description: "Outline the next product slice.",
+    startsAt: "2026-11-17T16:00:00.000Z",
+    endsAt: "2026-11-17T16:30:00.000Z",
+    color: "blue" as const,
+  };
+
+  it("accepts a complete event with a positive duration", () => {
+    expect(calendarEventSchema.parse(validEvent)).toEqual(validEvent);
+  });
+
+  it("rejects an empty title and an end before the start", () => {
+    const parsed = calendarEventSchema.safeParse({
+      ...validEvent,
+      title: "",
+      endsAt: "2026-11-17T15:30:00.000Z",
+    });
+
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.flatten().fieldErrors).toMatchObject({
+        title: expect.any(Array),
+        endsAt: expect.any(Array),
       });
     }
   });

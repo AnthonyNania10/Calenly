@@ -22,13 +22,15 @@ or external services are required.
 
 ## Local-first data
 
-The profile and demo request decisions are stored in `localStorage` under the
-versioned `opencal.local-state` key. `src/lib/local-state.ts` is the only module
-that reads or writes the serialized shape. It provides:
+The profile, calendar events, and demo request decisions are stored in
+`localStorage` under the versioned `opencal.local-state` key.
+`src/lib/local-state.ts` is the only module that reads or writes the serialized
+shape. It provides:
 
 - a Zod schema for the complete state and profile
 - deterministic defaults
 - explicit schema versioning
+- migration from the original profile-only schema to the calendar schema
 - safe recovery from invalid JSON, stale versions, and unavailable storage
 - validated writes and a complete reset operation
 
@@ -43,6 +45,8 @@ from depending on browser APIs or producing hydration mismatches.
 - `src/components/app-shell.tsx` — responsive desktop and mobile navigation
 - `src/components/dashboard-content.tsx` — schedule, requests, upcoming events,
   and quick actions
+- `src/components/calendar-content.tsx` — responsive month calendar and local
+  event creation, editing, and deletion
 - `src/components/settings-content.tsx` — validated local profile editor,
   preview, public URL, and reset control
 - `src/components/local-state-provider.tsx` — hydration-safe React state bridge
@@ -61,13 +65,13 @@ npm test
 npm run build
 ```
 
-Vitest covers persistence round trips, recovery, reset behavior, and profile
-validation. ESLint uses the Next.js recommended rules, and `tsc --noEmit`
-enforces strict type safety.
+Vitest covers persistence round trips, migration, recovery, reset behavior,
+profile validation, and calendar event validation. ESLint uses the Next.js
+recommended rules, and `tsc --noEmit` enforces strict type safety.
 
 ## Current boundaries
 
 This is a single-device prototype. It does not include authentication, remote
-sync, multi-user collaboration, a database, real calendar events, availability
-editing, integrations, notifications, or public booking pages. Clearing site
-data or switching browsers removes local changes.
+sync, multi-user collaboration, a database, external calendar synchronization,
+recurrence, availability editing, integrations, notifications, or public
+booking pages. Clearing site data or switching browsers removes local changes.

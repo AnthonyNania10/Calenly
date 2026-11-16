@@ -1,14 +1,12 @@
-import { CalendarDays } from "lucide-react";
+import type { Metadata } from "next";
 
-import { FeaturePlaceholder } from "@/components/feature-placeholder";
+import { CalendarContent } from "@/components/calendar-content";
+
+export const metadata: Metadata = {
+  title: "My Calendar",
+  description: "Plan and manage events stored locally in this browser.",
+};
 
 export default function CalendarPage() {
-  return (
-    <FeaturePlaceholder
-      icon={CalendarDays}
-      eyebrow="Empty calendar"
-      title="Your calendar is ready for its first event"
-      description="The local-first shell keeps this view intentionally empty. Calendar creation and editing are part of a later product slice."
-    />
-  );
+  return <CalendarContent />;
 }

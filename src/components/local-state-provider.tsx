@@ -10,11 +10,13 @@ import {
 } from "react";
 
 import {
+  calendarEventSchema,
   createDefaultState,
   loadLocalState,
   profileSchema,
   resetLocalState,
   saveLocalState,
+  type CalendarEventInput,
   type LocalProfile,
   type LocalState,
 } from "@/lib/local-state";
@@ -28,6 +30,9 @@ type LocalStateContextValue = {
     id: string,
     status: "pending" | "accepted" | "declined",
   ) => void;
+  createEvent: (event: CalendarEventInput) => boolean;
+  updateEvent: (id: string, event: CalendarEventInput) => boolean;
+  deleteEvent: (id: string) => void;
   reset: () => void;
 };
 
@@ -53,6 +58,9 @@ export function LocalStateProvider({ children }: { children: React.ReactNode }) 
       setState(result.state);
       setRecovered(result.source === "recovered");
       setHydrated(true);
+      if (result.source === "migrated") {
+        saveLocalState(browserStorage(), result.state);
+      }
     }, 0);
 
     return () => window.clearTimeout(timer);
@@ -85,6 +93,44 @@ export function LocalStateProvider({ children }: { children: React.ReactNode }) 
     [persist, state],
   );
 
+  const createEvent = useCallback(
+    (event: CalendarEventInput) => {
+      const parsed = calendarEventSchema.safeParse({
+        ...event,
+        id: crypto.randomUUID(),
+      });
+      if (!parsed.success) return false;
+      persist({ ...state, events: [...state.events, parsed.data] });
+      return true;
+    },
+    [persist, state],
+  );
+
+  const updateEvent = useCallback(
+    (id: string, event: CalendarEventInput) => {
+      const parsed = calendarEventSchema.safeParse({ ...event, id });
+      if (!parsed.success) return false;
+      persist({
+        ...state,
+        events: state.events.map((item) =>
+          item.id === id ? parsed.data : item,
+        ),
+      });
+      return true;
+    },
+    [persist, state],
+  );
+
+  const deleteEvent = useCallback(
+    (id: string) => {
+      persist({
+        ...state,
+        events: state.events.filter((event) => event.id !== id),
+      });
+    },
+    [persist, state],
+  );
+
   const reset = useCallback(() => {
     const next = resetLocalState(browserStorage());
     setState(next);
@@ -98,9 +144,22 @@ export function LocalStateProvider({ children }: { children: React.ReactNode }) 
       recovered,
       updateProfile,
       updateRequest,
+      createEvent,
+      updateEvent,
+      deleteEvent,
       reset,
     }),
-    [hydrated, recovered, reset, state, updateProfile, updateRequest],
+    [
+      createEvent,
+      deleteEvent,
+      hydrated,
+      recovered,
+      reset,
+      state,
+      updateEvent,
+      updateProfile,
+      updateRequest,
+    ],
   );
 
   return (

@@ -1,7 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { format } from "date-fns";
+import {
+  differenceInMinutes,
+  format,
+  isAfter,
+  isToday,
+  startOfTomorrow,
+} from "date-fns";
 import {
   ArrowRight,
   CalendarDays,
@@ -25,45 +31,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import type { CalendarEvent } from "@/lib/local-state";
 
-const schedule = [
-  {
-    time: "9:30 AM",
-    title: "Weekly planning",
-    detail: "Focus block · 45 min",
-    color: "bg-violet-500",
-  },
-  {
-    time: "11:00 AM",
-    title: "Product critique",
-    detail: "Studio team · 60 min",
-    color: "bg-blue-500",
-  },
-  {
-    time: "2:30 PM",
-    title: "Client kickoff",
-    detail: "Northstar Labs · 45 min",
-    color: "bg-emerald-500",
-  },
-];
-
-const upcoming = [
-  {
-    title: "Research synthesis",
-    startsAt: "2026-11-17T16:00:00.000Z",
-    duration: "60 min",
-  },
-  {
-    title: "Mentoring session",
-    startsAt: "2026-11-19T18:30:00.000Z",
-    duration: "30 min",
-  },
-  {
-    title: "Quarterly review",
-    startsAt: "2026-11-23T15:00:00.000Z",
-    duration: "45 min",
-  },
-];
+const eventColors: Record<CalendarEvent["color"], string> = {
+  blue: "bg-blue-500",
+  violet: "bg-violet-500",
+  emerald: "bg-emerald-500",
+  amber: "bg-amber-500",
+  rose: "bg-rose-500",
+};
 
 function DashboardSkeleton() {
   return (
@@ -80,6 +56,21 @@ function DashboardSkeleton() {
 export function DashboardContent() {
   const { state, hydrated, recovered, updateRequest, reset } = useLocalState();
   const pending = state.requests.filter((request) => request.status === "pending");
+  const todayEvents = state.events
+    .filter((event) => isToday(new Date(event.startsAt)))
+    .sort(
+      (left, right) =>
+        new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
+    );
+  const upcomingEvents = state.events
+    .filter((event) =>
+      isAfter(new Date(event.startsAt), startOfTomorrow()),
+    )
+    .sort(
+      (left, right) =>
+        new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
+    )
+    .slice(0, 3);
 
   if (!hydrated) return <DashboardSkeleton />;
 
@@ -110,7 +101,8 @@ export function DashboardContent() {
               Good morning, {state.profile.fullName.split(" ")[0]}.
             </h2>
             <p className="mt-2 max-w-xl text-primary-foreground/75">
-              You have three events today and {pending.length} request
+              You have {todayEvents.length} event
+              {todayEvents.length === 1 ? "" : "s"} today and {pending.length} request
               {pending.length === 1 ? "" : "s"} waiting for a decision.
             </p>
           </div>
@@ -179,33 +171,60 @@ export function DashboardContent() {
             <div>
               <CardTitle>Today&apos;s schedule</CardTitle>
               <p className="mt-1 text-xs text-muted-foreground">
-                Three events · 2h 30m scheduled
+                {todayEvents.length} event{todayEvents.length === 1 ? "" : "s"} ·{" "}
+                {todayEvents.reduce(
+                  (total, event) =>
+                    total +
+                    differenceInMinutes(
+                      new Date(event.endsAt),
+                      new Date(event.startsAt),
+                    ),
+                  0,
+                )}{" "}
+                min scheduled
               </p>
             </div>
             <CalendarDays className="size-5 text-muted-foreground" />
           </CardHeader>
           <CardContent className="space-y-1">
-            {schedule.map((event) => (
-              <div
-                key={event.time}
-                className="grid grid-cols-[4.5rem_1fr] gap-4 rounded-xl p-3 transition-colors hover:bg-muted/60"
-              >
-                <p className="text-xs font-medium text-muted-foreground">
-                  {event.time}
-                </p>
-                <div className="flex gap-3">
-                  <span
-                    className={`mt-1.5 size-2 shrink-0 rounded-full ${event.color}`}
-                  />
-                  <div>
-                    <p className="text-sm font-medium">{event.title}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {event.detail}
-                    </p>
+            {todayEvents.length ? (
+              todayEvents.map((event) => (
+                <div
+                  key={event.id}
+                  className="grid grid-cols-[4.5rem_1fr] gap-4 rounded-xl p-3 transition-colors hover:bg-muted/60"
+                >
+                  <p className="text-xs font-medium text-muted-foreground">
+                    {format(new Date(event.startsAt), "h:mm a")}
+                  </p>
+                  <div className="flex gap-3">
+                    <span
+                      className={`mt-1.5 size-2 shrink-0 rounded-full ${eventColors[event.color]}`}
+                    />
+                    <div>
+                      <p className="text-sm font-medium">{event.title}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {event.description || "Personal event"} ·{" "}
+                        {differenceInMinutes(
+                          new Date(event.endsAt),
+                          new Date(event.startsAt),
+                        )}{" "}
+                        min
+                      </p>
+                    </div>
                   </div>
                 </div>
+              ))
+            ) : (
+              <div className="grid min-h-40 place-items-center rounded-xl border border-dashed p-6 text-center">
+                <div>
+                  <CalendarDays className="mx-auto size-5 text-muted-foreground" />
+                  <p className="mt-2 text-sm font-medium">Your day is open</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Add an event from My Calendar.
+                  </p>
+                </div>
               </div>
-            ))}
+            )}
           </CardContent>
         </Card>
 
@@ -271,17 +290,27 @@ export function DashboardContent() {
           </Button>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-3">
-          {upcoming.map((event) => (
-            <div key={event.title} className="rounded-xl bg-muted/60 p-4">
-              <p className="text-xs text-primary">
-                {format(new Date(event.startsAt), "EEE, MMM d · h:mm a")}
-              </p>
-              <p className="mt-2 text-sm font-medium">{event.title}</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {event.duration}
-              </p>
+          {upcomingEvents.length ? (
+            upcomingEvents.map((event) => (
+              <div key={event.id} className="rounded-xl bg-muted/60 p-4">
+                <p className="text-xs text-primary">
+                  {format(new Date(event.startsAt), "EEE, MMM d · h:mm a")}
+                </p>
+                <p className="mt-2 text-sm font-medium">{event.title}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {differenceInMinutes(
+                    new Date(event.endsAt),
+                    new Date(event.startsAt),
+                  )}{" "}
+                  min
+                </p>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-xl border border-dashed p-5 text-sm text-muted-foreground sm:col-span-3">
+              No upcoming events yet. Add one from My Calendar.
             </div>
-          ))}
+          )}
         </CardContent>
       </Card>
     </div>
