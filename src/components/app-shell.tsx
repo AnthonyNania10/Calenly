@@ -8,6 +8,7 @@ import {
   ChevronRight,
   CircleUserRound,
   Clock3,
+  House,
   LayoutDashboard,
   Menu,
   PlugZap,
@@ -78,8 +79,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-muted/35">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r bg-card/95 p-4 backdrop-blur lg:flex lg:flex-col">
         <Link
-          href="/dashboard"
+          href="/"
           className="mb-8 flex h-10 items-center gap-2 px-2 font-semibold tracking-tight"
+          aria-label="OpenCal home"
         >
           <span className="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground">
             <CalendarDays className="size-4.5" aria-hidden="true" />
@@ -127,13 +129,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <h1 className="font-semibold tracking-tight">{title}</h1>
             </div>
           </div>
-          <Link
-            href="/settings"
-            className="grid size-9 place-items-center rounded-full bg-muted text-muted-foreground transition-colors hover:text-foreground"
-            aria-label="Profile settings"
-          >
-            <CircleUserRound className="size-5" />
-          </Link>
+          <div className="flex items-center gap-1">
+            <Link
+              href="/"
+              className="grid size-9 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Go to home page"
+            >
+              <House className="size-4.5" />
+            </Link>
+            <Link
+              href="/settings"
+              className="grid size-9 place-items-center rounded-full bg-muted text-muted-foreground transition-colors hover:text-foreground"
+              aria-label="Profile settings"
+            >
+              <CircleUserRound className="size-5" />
+            </Link>
+          </div>
         </div>
         {mobileOpen && (
           <div className="border-t bg-background px-5 py-4 lg:hidden">

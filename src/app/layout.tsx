@@ -16,11 +16,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL("https://opencal.local"),
   title: {
-    default: "OpenCal — Scheduling, made open",
+    default: "OpenCal — Your time, thoughtfully organized",
     template: "%s · OpenCal",
   },
   description:
-    "A modern, open scheduling foundation built for people who want control of their time.",
+    "Plan events, set availability, and manage scheduling requests from one focused workspace.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

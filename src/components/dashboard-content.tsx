@@ -10,6 +10,8 @@ import {
 } from "date-fns";
 import {
   ArrowRight,
+  ArrowUpRight,
+  CalendarClock,
   CalendarDays,
   Check,
   Clock3,
@@ -17,6 +19,8 @@ import {
   Plus,
   RotateCcw,
   Sparkles,
+  Timer,
+  UsersRound,
   UserRoundCheck,
   X,
 } from "lucide-react";
@@ -71,6 +75,19 @@ export function DashboardContent() {
         new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
     )
     .slice(0, 3);
+  const weeklyAvailabilityMinutes = state.availability.schedule
+    .filter((window) => window.enabled)
+    .reduce((total, window) => {
+      const [startHour, startMinute] = window.start.split(":").map(Number);
+      const [endHour, endMinute] = window.end.split(":").map(Number);
+      return (
+        total +
+        Math.max(
+          0,
+          endHour * 60 + endMinute - (startHour * 60 + startMinute),
+        )
+      );
+    }, 0);
 
   if (!hydrated) return <DashboardSkeleton />;
 
@@ -79,10 +96,9 @@ export function DashboardContent() {
       {recovered && (
         <Alert>
           <RotateCcw />
-          <AlertTitle>Local data was repaired</AlertTitle>
+          <AlertTitle>Your workspace was refreshed</AlertTitle>
           <AlertDescription>
-            OpenCal found unreadable browser data and safely restored the demo
-            defaults.
+            We restored your workspace to a clean starting point.
             <Button variant="link" className="ml-1 h-auto p-0" onClick={reset}>
               Reset again
             </Button>
@@ -90,9 +106,17 @@ export function DashboardContent() {
         </Alert>
       )}
 
-      <section className="overflow-hidden rounded-3xl bg-primary p-6 text-primary-foreground shadow-lg shadow-primary/10 sm:p-8">
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-          <div>
+      <section className="relative overflow-hidden rounded-3xl bg-[linear-gradient(135deg,oklch(0.46_0.2_255),oklch(0.38_0.16_275))] p-6 text-white shadow-xl shadow-primary/15 sm:p-8">
+        <div
+          className="absolute -top-24 -right-20 size-72 rounded-full border border-white/10 bg-white/5"
+          aria-hidden="true"
+        />
+        <div
+          className="absolute -right-4 -bottom-28 size-52 rounded-full border border-white/10"
+          aria-hidden="true"
+        />
+        <div className="relative grid gap-8 lg:grid-cols-[1fr_18rem] lg:items-end">
+          <div className="max-w-2xl">
             <p className="flex items-center gap-2 text-sm text-primary-foreground/70">
               <Sparkles className="size-4" />
               {format(new Date(), "EEEE, MMMM d")}
@@ -105,16 +129,97 @@ export function DashboardContent() {
               {todayEvents.length === 1 ? "" : "s"} today and {pending.length} request
               {pending.length === 1 ? "" : "s"} waiting for a decision.
             </p>
+            <div className="mt-7 flex flex-wrap gap-3">
+              <Button variant="secondary" render={<Link href="/calendar" />}>
+                View calendar
+                <ArrowRight />
+              </Button>
+              <Button
+                render={<Link href="/availability" />}
+                className="border border-white/20 bg-white/10 text-white hover:bg-white/20"
+              >
+                Edit availability
+              </Button>
+            </div>
           </div>
-          <Button
-            variant="secondary"
-            render={<Link href="/calendar" />}
-            className="w-fit"
-          >
-            View calendar
-            <ArrowRight />
-          </Button>
+          <div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur-sm">
+            <p className="text-xs font-medium text-white/60">Next on your day</p>
+            {todayEvents[0] ? (
+              <>
+                <p className="mt-3 font-medium">{todayEvents[0].title}</p>
+                <p className="mt-1 text-sm text-white/70">
+                  {format(new Date(todayEvents[0].startsAt), "h:mm a")} –{" "}
+                  {format(new Date(todayEvents[0].endsAt), "h:mm a")}
+                </p>
+                <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/15">
+                  <div className="h-full w-2/3 rounded-full bg-white/70" />
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="mt-3 font-medium">Your day is open</p>
+                <p className="mt-1 text-sm text-white/70">
+                  Add an event when you&apos;re ready.
+                </p>
+              </>
+            )}
+          </div>
         </div>
+      </section>
+
+      <section
+        className="grid grid-cols-2 gap-3 lg:grid-cols-4"
+        aria-label="Workspace summary"
+      >
+        {[
+          {
+            label: "Today",
+            value: todayEvents.length,
+            detail: "scheduled events",
+            icon: CalendarClock,
+            color: "bg-blue-50 text-blue-600",
+          },
+          {
+            label: "Weekly hours",
+            value: `${Math.round(weeklyAvailabilityMinutes / 60)}h`,
+            detail: "available to book",
+            icon: Timer,
+            color: "bg-violet-50 text-violet-600",
+          },
+          {
+            label: "Requests",
+            value: pending.length,
+            detail: "awaiting review",
+            icon: UserRoundCheck,
+            color: "bg-amber-50 text-amber-600",
+          },
+          {
+            label: "Connections",
+            value: state.connections.length,
+            detail: "recent calendars",
+            icon: UsersRound,
+            color: "bg-emerald-50 text-emerald-600",
+          },
+        ].map(({ label, value, detail, icon: Icon, color }) => (
+          <Card key={label} className="shadow-sm">
+            <CardContent className="flex items-center gap-3 p-4 sm:p-5">
+              <span
+                className={`grid size-10 shrink-0 place-items-center rounded-xl ${color}`}
+              >
+                <Icon className="size-4" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">{label}</p>
+                <p className="mt-0.5 text-xl font-semibold tracking-tight">
+                  {value}
+                </p>
+                <p className="truncate text-[11px] text-muted-foreground">
+                  {detail}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </section>
 
       <section aria-labelledby="quick-actions-title">
@@ -142,7 +247,7 @@ export function DashboardContent() {
               icon: Clock3,
             },
             {
-              label: "Copy booking link",
+              label: "Share your link",
               detail: `opencal.local/${state.profile.username}`,
               href: "/settings",
               icon: Link2,
@@ -151,15 +256,18 @@ export function DashboardContent() {
             <Link
               key={label}
               href={href}
-              className="group rounded-2xl border bg-card p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+              className="group flex items-center gap-3 rounded-2xl border bg-card p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/20 hover:shadow-md"
             >
               <span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary">
                 <Icon className="size-4" />
               </span>
-              <p className="mt-4 text-sm font-medium">{label}</p>
-              <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                {detail}
-              </p>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium">{label}</span>
+                <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                  {detail}
+                </span>
+              </span>
+              <ArrowUpRight className="size-4 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-primary" />
             </Link>
           ))}
         </div>
@@ -233,7 +341,7 @@ export function DashboardContent() {
             <div>
               <CardTitle>Pending requests</CardTitle>
               <p className="mt-1 text-xs text-muted-foreground">
-                Stored only in this browser
+                Choose which meetings join your calendar
               </p>
             </div>
             <Badge variant="secondary">{pending.length}</Badge>
